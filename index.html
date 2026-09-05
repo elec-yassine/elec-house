@@ -113,6 +113,7 @@ html[dir="rtl"] .methode .step:last-child { border-left: 0; }
 .del-btn{position:absolute;top:6px;right:6px;background:rgba(255,0,0,.85);color:#fff;border:none;border-radius:50%;width:26px;height:26px;cursor:pointer;font-weight:bold}
 .upload-box{border:2px dashed #333;padding:25px;text-align:center;border-radius:15px;cursor:pointer;transition:.3s;background:#080808}
 .upload-box:hover{border-color:var(--yellow)}
+.cloud-input{width:100%;padding:10px;margin-top:10px;border-radius:8px;border:1px solid #333;background:#111;color:#fff;font-size:12px}
 .save-btn{width:100%;background:var(--yellow);color:#000;border:none;padding:12px;border-radius:999px;font-weight:bold;cursor:pointer;margin-top:20px;font-size:14px;transition:.2s}
 .save-btn:hover{background:var(--yellow2)}
 
@@ -239,7 +240,6 @@ html[dir="rtl"] .methode .step:last-child { border-left: 0; }
 <footer><div class="container foot">
   <span>© <span id="year"></span> Elec-House</span>
   
-  <!-- Social Links -->
   <div class="social-links">
     <a href="#" target="_blank" title="TikTok"><span>🎵</span></a>
     <a href="#" target="_blank" title="Facebook"><span>facebook</span></a>
@@ -271,12 +271,20 @@ html[dir="rtl"] .methode .step:last-child { border-left: 0; }
 <div id="adminModal" class="admin-modal">
   <div class="admin-content">
     <div class="admin-head">
-      <h2>Gestion de Galerie (Admin)</h2>
+      <h2>Gestion de Galerie (Cloud Database)</h2>
       <button class="close-btn" onclick="closeAdmin()">&times;</button>
     </div>
+    
+    <div style="margin-bottom:15px">
+      <label style="font-size:12px;color:#aaa">Cloudinary Cloud Name:</label>
+      <input type="text" id="cloudName" class="cloud-input" placeholder="Ex: demo">
+      <label style="font-size:12px;color:#aaa;margin-top:10px;display:block">Upload Preset (Unsigned):</label>
+      <input type="text" id="uploadPreset" class="cloud-input" placeholder="Ex: my_preset">
+    </div>
+
     <div class="upload-box" onclick="document.getElementById('imgInput').click()">
-      <p style="margin:0;color:#aaa">📁 Cliquez ici pour choisir les photos</p>
-      <input type="file" id="imgInput" accept="image/*" multiple style="display:none" onchange="previewImages(this.files)">
+      <p style="margin:0;color:#aaa" id="uploadStatus">📁 Cliquez ici pour téléverser une image sur Cloudinary</p>
+      <input type="file" id="imgInput" accept="image/*" multiple style="display:none" onchange="uploadToCloudinary(this.files)">
     </div>
     
     <div id="adminGalleryGrid" class="gallery-admin-grid"></div>
@@ -383,7 +391,7 @@ function toggleWaPopup() {
   document.getElementById('waPopup').classList.toggle('active');
 }
 
-/* GALLERY & ADMIN LOGIC */
+/* CLOUDINARY & GALLERY LOGIC */
 let galleryImages = JSON.parse(localStorage.getItem('public_gallery') || '[]');
 let tempAdminImages = [];
 
@@ -405,6 +413,8 @@ function openAdmin() {
   const pass = prompt("Mot de passe:");
   if(user === "admin" && pass === "1234") {
     tempAdminImages = [...galleryImages];
+    document.getElementById('cloudName').value = localStorage.getItem('c_name') || '';
+    document.getElementById('uploadPreset').value = localStorage.getItem('c_preset') || '';
     renderAdminGallery();
     document.getElementById('adminModal').classList.add('active');
   } else {
@@ -416,15 +426,43 @@ function closeAdmin() {
   document.getElementById('adminModal').classList.remove('active');
 }
 
-function previewImages(files) {
-  Array.from(files).forEach(file => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      tempAdminImages.push(e.target.result);
-      renderAdminGallery();
-    };
-    reader.readAsDataURL(file);
-  });
+async function uploadToCloudinary(files) {
+  const cName = document.getElementById('cloudName').value.trim();
+  const cPreset = document.getElementById('uploadPreset').value.trim();
+
+  if(!cName || !cPreset) {
+    alert("Veuillez remplir Cloud Name et Upload Preset d'abord!");
+    return;
+  }
+
+  localStorage.setItem('c_name', cName);
+  localStorage.setItem('c_preset', cPreset);
+
+  const status = document.getElementById('uploadStatus');
+  status.textContent = "⏳ Téléversement vers Cloudinary...";
+
+  for(let file of files) {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', cPreset);
+
+    try {
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${cName}/image/upload`, {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      if(data.secure_url) {
+        tempAdminImages.push(data.secure_url);
+        renderAdminGallery();
+      } else {
+        alert("Erreur: " + JSON.stringify(data));
+      }
+    } catch(err) {
+      alert("Échec du téléversement");
+    }
+  }
+  status.textContent = "📁 Cliquez ici pour téléverser une image sur Cloudinary";
 }
 
 function renderAdminGallery() {
